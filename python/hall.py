@@ -23,11 +23,7 @@ import h5py
 import pyfplo.slabify as sla
 from cpp_output import OutputGrabber 
 
-
-_names = ["x","y","z"]
-_derivative_cases = [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]] 
-#here the second coordinate is the momentum direction with respect to which the derivative is taken
-                     #1xx   2yx   3zx   4xy   5yy   6zy   7xz   8yz   9zz
+_Ndim = 3
 
 class hall:
   """
@@ -142,14 +138,15 @@ class hall:
 
       return (E,CC,F)
 
+  #methods for the use of point symmetries
+
   def find_M_beta_gamma(self,**kwargs):
       """
       Finds on the fly transformation matrix of the Berry curvature associated with a given point symmetry.
       It considers three random k points and inverts a 9x9 system of equations whose solution is the unique transformation matrix searched.
 
       Args:
-
-      R: transformation matrix in momentum space
+           R: transformation matrix in momentum space
       """
       R = np.matrix(kwargs["R"])
       ind = kwargs["index"]
@@ -158,10 +155,10 @@ class hall:
 
       A = np.matrix(np.zeros((9, 9))) 
       B = np.matrix(np.zeros((1, 9))) 
-      for i in range(3):
+      for i in range(_Ndim):
 
            
-          kp = np.random.rand(3,1)
+          kp = np.random.rand(_Ndim,1)
           Rkp = np.matmul(R,np.matrix(kp))
 
           (E,CC,F) = self.compute_bc(kp)
@@ -170,10 +167,10 @@ class hall:
           file.write("\n Random kp: ",i,"\n", kp)
           file.write("\n Transformed kp: ",i,"\n", Rkp)
 
-          for al in range(3):
-             ind_al = 3*i + al
-             for be in range(3):
-                ind_be = 3*al + be
+          for al in range(_Ndim):
+             ind_al = _Ndim*i + al
+             for be in range(_Ndim):
+                ind_be = _Ndim*al + be
                 A[ind_al,ind_be] = F[be][0]
              B[0,ind_al] = F2[al][0]
 
@@ -182,9 +179,9 @@ class hall:
 
       C = np.matmul(LA.inv(A),B.T)
            
-      file.write("C: \n",C.reshape(3,3))
+      file.write("C: \n",C.reshape(_Ndim,_Ndim))
       file.close()
-      return C.reshape(3,3)
+      return C.reshape(_Ndim,_Ndim)
 
   def build_rep_matrices(self):
       """
@@ -229,13 +226,10 @@ class hall:
       Computes the star of a k-point
 
       Args:
-      
-      k: k-point
+          k: k-point
 
-      Returns
-
-      list of indexes associated with the point symmetries that generate the different elements in the star (one per each if there are more than one)
-
+      Returns:
+          list of indexes associated with the point symmetries that generate the different elements in the star (one per each if there are more than one)
       """
       kp = np.matrix(kwargs["k"])
       indexes = [] 
@@ -258,16 +252,12 @@ class hall:
       Computes the contribution to the BCD of the k-points related by symmetry to a certain k-point.
 
       Args:
-
-      kp: k-point
-
-      indexes: indexes associated with the star of kp
-
-      bcd_k: BCD at k
+          kp: k-point
+          indexes: indexes associated with the star of kp
+          bcd_k: BCD at k
 
       Returns:
-      
-      The BCD sum of the contributions of all partners (included the original) in list format
+          The BCD sum of the contributions of all partners (included the original) in list format
       """
 
       kp = np.matrix(kwargs["kp"])
@@ -279,15 +269,13 @@ class hall:
          #G  = self.symm[index]
          Rinv = self.Rinv[index]
          M = self.bc_rep[index]
-         BCD_Rk = np.matrix(np.zeros((3, 3)))
-         for al in range(3):
-            for be in range(3):
-                for gamma in range(3):
-                    for delta in range(3):
+         BCD_Rk = np.matrix(np.zeros((_Ndim, _Ndim)))
+         for al in range(_Ndim):
+            for be in range(_Ndim):
+                for gamma in range(_Ndim):
+                    for delta in range(_Ndim):
                         BCD_Rk[al,be] += M[be,gamma] * Rinv[delta,al] * BCD_k[delta,gamma] 
          BCD_SUMk += BCD_Rk
-
-
 
       return BCD_SUMk
 
@@ -299,14 +287,11 @@ class hall:
            d_{ab}(k) = \sum_{n,E_{nk}<E_f}  \\frac{\partial \Omega_b}{\partial k_a} dk
 
       Args:
-         
-        k point
+          k point
 
       Returns:
-
-        list of BCD tensors (one tensor per Fermi energy)
+          list of BCD tensors (one tensor per Fermi energy)
  
-
       """
 
       start = time.time()
@@ -322,53 +307,47 @@ class hall:
          E = self.compute_bc(k)[0] #to change when the bug in diagonalize is corrected by Klauss
          Delta = 2*self.delta
 
-      BCD_k = [np.matrix(np.zeros((3, 3))) for i in range(len(self.energy_fermi))]
-      for case in _derivative_cases:
-             
-           alfa = case[1]
-           beta = case[0]
+      BCD_k = [np.matrix(np.zeros((_Ndim, _Ndim))) for i in range(len(self.energy_fermi))]
 
+      #we iterate over the momentum directions to which we will estimate the derivative
+      for alfa in range(_Ndim): 
+             
            ### evaluate displaced k-point for numerical derivative
            k_disp = np.copy(k)
-           k_disp[case[1]] += self.delta
+           k_disp[alfa] += self.delta
 
-
-           ### evaluate displaced Berry curvature
-           (E,CC,F_disp) = self.compute_bc(k_disp)
+           ### evaluate displaced Berry curvature. we rewrite the eigenenergies, because we don't need them here
+           (Ed,CC,F_plus) = self.compute_bc(k_disp)
 
 	   if(self.centered_scheme):
               k_disp_minus = np.copy(k)
-              k_disp_minus[case[1]] -= self.delta
-              (E,CC_disp_minus,F) = self.compute_bc(k_disp_minus)
-
+              k_disp_minus[alfa] -= self.delta
+              (Ed,CC,F) = self.compute_bc(k_disp_minus)
 
            ind = 0 #band index
+           band_contribution_to_dipole = [0 for i in range(_Ndim)] #one component for each Berry curvature component
            for e in E:
 
                if(e > self.energy_bottom and e < self.energy_fermi[-1]): ## i.e.: we only do anything if this state is below the maximum fermi energy considered
 
                ### evaluate finite difference for this momentum and band
-                  band_contribution_to_dipole = (F_disp[case[0]][ind]-F[case[0]][ind]) / Delta
+                  for beta in range(_Ndim):
+                     band_contribution_to_dipole[beta] = (F_plus[beta][ind]-F[beta][ind]) / Delta
 
-	   	  if(self.verbosity > 3):
-	             if(band_contribution_to_dipole > 1e6):
-			print("WARNING, here some large contribution:, ", k_disp,alfa,beta,"-F_disp: \n", F_disp[case[0]][ind])
-			print("WARNING, here some large contribution:, ", k,alfa,beta,"-F: \n", F[case[0]][ind])
-			print("wanna try different delta??\n\n ")
-
-                  if(np.abs(band_contribution_to_dipole) > self.TOLBD):
+                  if(np.sum(np.abs(band_contribution_to_dipole)) > self.TOLBD):
                      if(self.verbosity > 1):
-                        print("WARNING: not adding some large contributions at k-point: ", k, "band index: ", ind, band_contribution_to_dipole,e)
+                        print("WARNING: not adding some large contributions at k-point: ", k, "band index: ", ind, np.sum(np.abs(band_contribution_to_dipole)),e)
                ### add this contribution to different Fermi energy calculations depending on band energy
                   else:
                      for int_mu in range(len(self.energy_fermi)):
                         if(e <= self.energy_fermi[int_mu]):
-                           BCD_k[int_mu][alfa,beta] += band_contribution_to_dipole 
+                           for beta in range(_Ndim):
+                               BCD_k[int_mu][alfa,beta] += band_contribution_to_dipole[beta]
 
                ind +=1
 
       end = time.time()
-#      print "\n dipole_on_point took: ",(end-start)/3600, "hours"
+#      print("\n dipole_on_point took: ",(end-start)/3600, "hours")
       return BCD_k
 
 
