@@ -75,9 +75,9 @@ class hall:
       self.gauge = kwargs.pop('gauge','periodic')
       self.centered_scheme = kwargs.pop('centered_scheme',True)
       self.centered = kwargs.pop('centered',True)
-      print "Using gauge, ", self.gauge
-      print "Centered slice, ", self.centered
-      print "Scheme_Centered, ", self.centered_scheme
+      print("Using gauge, ", self.gauge)
+      print("Centered slice, ", self.centered)
+      print("Scheme_Centered, ", self.centered_scheme)
       self.mesh = kwargs['mesh']
       self.origin = kwargs.pop('origin',[0.,0.,0.])
       R=self.S.hamdataCCell()
@@ -93,8 +93,8 @@ class hall:
       self.VOL_fplo = np.abs(np.linalg.det(G))
       self.VOL_bohr = np.abs(np.linalg.det(G))*(self.S.kscale)**3
         
-      print "VOL_bohr: ", self.VOL_bohr
-      print "scale: ", self.S.kscale
+      print("VOL_bohr: ", self.VOL_bohr)
+      print("scale: ", self.S.kscale)
 
   def compute_E(self,k):
       """
@@ -108,7 +108,6 @@ class hall:
          Output of sla.diagonalize(makef=True)
       """
       Hk = self.S.hamAtKPoint(k,self.ms)
-      print "Here"
       if(self.verbosity<2):
           out = OutputGrabber()
           out.start()
@@ -168,8 +167,8 @@ class hall:
           (E,CC,F) = self.compute_bc(kp)
           (E2,CC2,F2) = self.compute_bc(Rkp)
 
-          print >> file,"\n Random kp: ",i,"\n", kp
-          print >> file,"\n Transformed kp: ",i,"\n", Rkp
+          file.write("\n Random kp: ",i,"\n", kp)
+          file.write("\n Transformed kp: ",i,"\n", Rkp)
 
           for al in range(3):
              ind_al = 3*i + al
@@ -178,12 +177,12 @@ class hall:
                 A[ind_al,ind_be] = F[be][0]
              B[0,ind_al] = F2[al][0]
 
-      print >> file,"A: \n",A
-      print >> file,"B: \n",B
+      file.write("A: \n",A)
+      file.write(,"B: \n",B)
 
       C = np.matmul(LA.inv(A),B.T)
            
-      print >> file,"C: \n",C.reshape(3,3)
+      file.write("C: \n",C.reshape(3,3))
       file.close()
       return C.reshape(3,3)
 
@@ -204,13 +203,13 @@ class hall:
 
       for w in WF:
         if(w.index != 0 and w.index !=1): #except time-reversal for the moment and the identity
-          print >> file,"\n -- ",w.symbol," --\n"
-          print >> file,"R=\n",w.alpha
+          file.write("\n -- ",w.symbol," --\n")
+          file.write(,"R=\n",w.alpha)
           self.symm[w.index] = w
           self.Rinv[w.index] = LA.inv(np.matrix(w.alpha))
           M_al_be = self.find_M_beta_gamma(R=w.alpha,index=w.index)
           self.bc_rep[w.index] = np.matrix(M_al_be)
-          print >> file,"M=\n",M_al_be
+          file.write("M=\n",M_al_be)
 
       file.close()
 
@@ -280,12 +279,6 @@ class hall:
          #G  = self.symm[index]
          Rinv = self.Rinv[index]
          M = self.bc_rep[index]
-#         R = np.matrix(G.alpha)
-
-#        if(self.verbosity > 2):
-#            print "\n\n->R: \n",R
-
-#         Rinv = LA.inv(R)
          BCD_Rk = np.matrix(np.zeros((3, 3)))
          for al in range(3):
             for be in range(3):
@@ -294,8 +287,6 @@ class hall:
                         BCD_Rk[al,be] += M[be,gamma] * Rinv[delta,al] * BCD_k[delta,gamma] 
          BCD_SUMk += BCD_Rk
 
-#        if(self.verbosity > 2):
-#            print "Partner associated with R: \n",BCD_Rk
 
 
       return BCD_SUMk
@@ -321,7 +312,7 @@ class hall:
       start = time.time()
       k = kwargs["k"]
       if(self.verbosity > 2):
-            print "----> k: ",k
+            print("----> k: ",k)
 
       F = None
       if(not self.centered_scheme):
@@ -361,9 +352,9 @@ class hall:
 
 	   	  if(self.verbosity > 3):
 	             if(band_contribution_to_dipole > 1e6):
-			print "WARNING, here some large contribution:, ", k_disp,alfa,beta,"-F_disp: \n", F_disp[case[0]][ind]
-			print "WARNING, here some large contribution:, ", k,alfa,beta,"-F: \n", F[case[0]][ind]
-			print "wanna try different delta??\n\n "
+			print("WARNING, here some large contribution:, ", k_disp,alfa,beta,"-F_disp: \n", F_disp[case[0]][ind])
+			print("WARNING, here some large contribution:, ", k,alfa,beta,"-F: \n", F[case[0]][ind])
+			print("wanna try different delta??\n\n ")
 
                   if(np.abs(band_contribution_to_dipole) > self.TOLBD):
                      if(self.verbosity > 1):
@@ -380,87 +371,5 @@ class hall:
 #      print "\n dipole_on_point took: ",(end-start)/3600, "hours"
       return BCD_k
 
-
-#some methods for post-processing. We leave them here for the moment
-
-def decompose_in_sym_assym(**kwargs):
-    """
-    Obtain symmetric and antisymmetric parts of the BCD for all computed Fermi energies.
-
-    Args:
-
-       arxiv_name: hdf5 file with results of BCD
-
-    Returns:
-
-       Creates files sym.dat and asym.dat
-    """
-
-    arxiv_name = kwargs.pop("arxiv_name","results.hdf5")
-    ar = h5py.File(arxiv_name,'r')
-    fermi_energy = np.array(ar['run_info']['energy_fermi'])
-    bcd = np.array(ar['BCD']['tensor'])
-
-    file_s = open("sym.dat",'w')
-    file_as = open("asym.dat",'w')
-
-    for n in range(len(bcd)):
-      BCD_L = bcd[n]
-      BCD_tensor,S,ST = sym_plus_asym(BCD_L)
-
-      print >> file_s,"    ",fermi_energy[n]
-      for i in range(3):
-        for j in range(3):
-            print >> file_s, S[i][j],
-        print >> file_s,"\n",
-
-      print >> file_as,"    ",fermi_energy[n]
-      for i in range(3):
-        for j in range(3):
-            print >> file_as, ST[i][j],
-        print >> file_as,"\n",
-
-    file_s.close()
-    file_as.close()
-
-def diagonalize_bcd(**kwargs):
-    """
-    Function to diagonalize symmetric part of the BCD
-
-    Args:
-       arxiv_name: hdf5 file with results of BCD
-       ef: Fermi energy 
-
-    Returns:
-         
-       -1 if fermi energy is not within the calculated ones
-
-       Creates "out_diag.data" with results of the diagonalization
-    """
-    arxiv_name = kwargs.pop("arxiv_name","results.hdf5")
-    ef = kwargs.pop("ef",0.0)
-    ar = h5py.File(arxiv_name,'r')
-    fermi_energy = np.array(ar['run_info']['energy_fermi'])
-    bcd = np.array(ar['BCD']['tensor'])
-
-    find_fermi_energy = False
-    for  n in range(len(fermi_energy)):
-      if((fermi_energy[n]-ef)**2 < 1e-15):
-        find_fermi_energy = True
-        break
-
-    if not find_fermi_energy:
-      print "Error: the Fermi energy is not within the calculated ones."
-      return -1
-
-    BCD_L = bcd[n]
-    BCD_tensor,S,ST = sym_plus_asym(BCD_L)
-    file = open("out_diag.dat",'w')
-    print >> file,"BCD (original list):\n", BCD_L,"\n"
-    print >> file,"BCD:\n", BCD_tensor,"\n"
-    print >> file,"Symmetric part of BCD:\n", S,"\n"
-    w, v = LA.eig(S)
-    print >> file, "Eigenvalues:\n", w,"\n"
-    print >> file, "Eigenvectors:\n", v,"\n"
 
 
