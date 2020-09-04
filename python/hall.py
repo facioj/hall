@@ -1,13 +1,8 @@
 #!/usr/bin/python
-"""Implementation of various anomalous Hall conductivities.
 
-   The main pourpose is to return a callable method that computes the integrated in energy Berry curvature or Berry curvature dipole to be interfaced with the adaptive mesh project.
+from __future__ import absolute_import, division, with_statement
 
-"""
-
-#from __future__ import absolute_import, division, with_statement
-
-__all__ = ['hall','bcd2file']
+__all__ = ['hall_k']
 __author__  = ['Jorge I. Facio']
 __date__    = 'Sept 3, 2020'
 __email__   = 'facio.ji@gmail.com'
@@ -23,45 +18,38 @@ import h5py
 import pyfplo.slabify as sla
 from cpp_output import OutputGrabber 
 
-_Ndim = 3
 
-class hall:
+class hall_k:
   """
-  Attributes:
-
-       delta: value of displacement in momentum space used for numerical derivatives.
-
-       energy_bottom:  bottom energy for integrations. It could be the lowest energy considered in the tight-binding model or some other value if, for instance, it is consider that a certain set of bands do not contribute to the integration. By default is -100eV.
-
-       mesh: subdivisions in the Brillouin zone.
-
-       verbosity: three relevant ranges: [0-1], [1-2] and [2<].
-
-       gauge: gauge used for the Berry curvature calculation. By default is 'periodic'. `TO DO: implement the use of the relative gauge.`
-
-       TOLBD: contribution of a Bloch state to the BCD larger than this number are neglected under the assumption that comes from degeneracies that should cancell between each other. By default: 1e25. Recommendation:  change and evaluate if it affects the results.
+  The pourpose of this class to is to return a callable method that computes the summed-over-bands Berry curvature or Berry curvature dipole at a given k-point. Such callable method is to be interfaced with schemes that perform the three-dimensional integration, like the adaptive mesh project. The __call__ constructor is therefore introduced. This method has as argument the coordinates of the k-point (fplo units), and can return either the contribution to the linear anomalous Hall or the nonlinear (see below).
 
   Args:
 
        slabify object
 
-       energy_bottom: number.
+       linear: boolean. If true, the __called__ constructor computes the contribution of a certain k-point to the linear anomalous Hall conductivity. If false, it computes the contribution to the Berry curvature dipole
 
        energy_fermi: [ef_1,..,ef_n] list of Fermi energies to considered. By default is [0.0].
 
+       verbosity: three relevant ranges: [0-1], [1-2] and [2<].
+
+       gauge: gauge used for the Berry curvature calculation. By default is 'periodic'. `TO DO: implement the use of the relative gauge.`
+
        delta: displacement to perform the numerical derivative. By default 1e-5.
 
-       mesh: [N1,N2,N3], N_i is the number of subdivions along the i primitive vector.
-
-       verbosity: integer.
-
-       gauge: 'periodic' or 'relative'. 
-
        centered_scheme: Boolean, it specifies how the numerical derivative of the Berry curvature is done
+
+       Ndim: integer. Number of dimensions, assumed to be 3 (but could be 2).
+
+       energy_bottom:  float. Bottom energy for integrations, by default -100eV. It could be used if, for instance, it is considered that a certain fully occupied and separated set of bands do not contribute to the integration.
+
+       TOLBD: contribution of a Bloch state to the BCD larger than this number are neglected under the assumption that comes from degeneracies that should cancell between each other. By default: 1e25. Recommendation:  change and evaluate if it affects the results.
+
   """
 
   def __init__(self,**kwargs):
       self.S = kwargs['slabify']
+      self.Ndim = kwargs.pop('Ndim',3)
       self.delta = kwargs.pop('delta',1e-5)
       self.verbosity = kwargs.pop('verbosity',0)
       self.ms  = 0 #we always have spin-orbit coupling
@@ -70,27 +58,11 @@ class hall:
       self.energy_fermi = kwargs.pop('energy_fermi',[0.0])
       self.gauge = kwargs.pop('gauge','periodic')
       self.centered_scheme = kwargs.pop('centered_scheme',True)
-      self.centered = kwargs.pop('centered',True)
+      self.linear = kwargs.pop('linear',True)
       print("Using gauge, ", self.gauge)
       print("Centered slice, ", self.centered)
       print("Scheme_Centered, ", self.centered_scheme)
-      self.mesh = kwargs['mesh']
-      self.origin = kwargs.pop('origin',[0.,0.,0.])
-      R=self.S.hamdataCCell()
-      G=self.S.hamdataRCell()
-      self.G1=G[:,0]
-      self.G2=G[:,1]
-      self.G3=G[:,2]
-      self.dG1=LA.norm(self.G1)
-      self.dG2=LA.norm(self.G2)
-      self.dG3=LA.norm(self.G3)
-      self.bohr_to_cm = 5.29177e-9     
-      self.G_0 = 1./12906.4037217 #ohm-1 (conductance quantum: 2e^2/h)
-      self.VOL_fplo = np.abs(np.linalg.det(G))
-      self.VOL_bohr = np.abs(np.linalg.det(G))*(self.S.kscale)**3
-        
-      print("VOL_bohr: ", self.VOL_bohr)
-      print("scale: ", self.S.kscale)
+      print("k-scale: ", self.S.kscale)
 
   def compute_E(self,k):
       """
@@ -279,12 +251,47 @@ class hall:
 
       return BCD_SUMk
 
-  def dipole_on_point(self,**kwargs):
+  def sum_bc_on_point(self,k):
       """
-      Computes the Berry curvature dipole tensor at a given k-point
+      Computes the sum over bands of the Berry curvature vector at a given k-point
 
         .. math::
-           d_{ab}(k) = \sum_{n,E_{nk}<E_f}  \\frac{\partial \Omega_b}{\partial k_a} dk
+           om_{a}(k) = \sum_{n,E_{nk}<E_f}  \Omega_a  
+      
+      Args:
+          k point
+
+      Returns:
+          list of BC vectors (one per Fermi energy)
+ 
+      """
+
+      if(self.verbosity > 2):
+            print("----> k: ",k)
+
+      F = None
+      (E,CC,F) = self.compute_bc(k)
+
+      Om_k = [[0,0,0] for i in range(len(self.energy_fermi))]
+
+      ind = 0 #band index
+      for e in E:
+           if(e > self.energy_bottom and e < self.energy_fermi[-1]):
+                for int_mu in range(len(self.energy_fermi)):
+                     if(e <= self.energy_fermi[int_mu]):
+                           for beta in range(_Ndim):
+                               Om_k[int_mu][beta] += F[beta][ind]
+
+           ind +=1
+
+      return Om_k
+
+  def sum_bcd_on_point(self,k):
+      """
+      Computes the summed over bands Berry curvature dipole tensor at a given k-point
+
+        .. math::
+           d_{ab}(k) = \sum_{n,E_{nk}<E_f}  \\frac{\partial \Omega_b}{\partial k_a} 
 
       Args:
           k point
@@ -295,7 +302,6 @@ class hall:
       """
 
       start = time.time()
-      k = kwargs["k"]
       if(self.verbosity > 2):
             print("----> k: ",k)
 
@@ -350,5 +356,9 @@ class hall:
 #      print("\n dipole_on_point took: ",(end-start)/3600, "hours")
       return BCD_k
 
-
+  def __call__(self,k):
+      if(self.linear):
+           return self.sum_bc_on_point(k)
+      else:
+           return self.sum_bcd_on_point(k)
 
