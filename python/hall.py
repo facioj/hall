@@ -125,12 +125,12 @@ class hall_k:
 
       file = open("""g_%(ind)s.dat"""%locals(),"w") 
 
-      A = np.matrix(np.zeros((9, 9))) 
-      B = np.matrix(np.zeros((1, 9))) 
-      for i in range(_Ndim):
+      A = np.matrix(np.zeros((self.Ndim**2, self.Ndim**2))) 
+      B = np.matrix(np.zeros((1, self.Ndim**2))) 
+      for i in range(self.Ndim):
 
            
-          kp = np.random.rand(_Ndim,1)
+          kp = np.random.rand(self.Ndim,1)
           Rkp = np.matmul(R,np.matrix(kp))
 
           (E,CC,F) = self.compute_bc(kp)
@@ -139,10 +139,10 @@ class hall_k:
           file.write("\n Random kp: ",i,"\n", kp)
           file.write("\n Transformed kp: ",i,"\n", Rkp)
 
-          for al in range(_Ndim):
-             ind_al = _Ndim*i + al
-             for be in range(_Ndim):
-                ind_be = _Ndim*al + be
+          for al in range(self.Ndim):
+             ind_al = self.Ndim*i + al
+             for be in range(self.Ndim):
+                ind_be = self.Ndim*al + be
                 A[ind_al,ind_be] = F[be][0]
              B[0,ind_al] = F2[al][0]
 
@@ -151,9 +151,9 @@ class hall_k:
 
       C = np.matmul(LA.inv(A),B.T)
            
-      file.write("C: \n",C.reshape(_Ndim,_Ndim))
+      file.write("C: \n",C.reshape(self.Ndim,self.Ndim))
       file.close()
-      return C.reshape(_Ndim,_Ndim)
+      return C.reshape(self.Ndim,self.Ndim)
 
   def build_rep_matrices(self):
       """
@@ -241,11 +241,11 @@ class hall_k:
          #G  = self.symm[index]
          Rinv = self.Rinv[index]
          M = self.bc_rep[index]
-         BCD_Rk = np.matrix(np.zeros((_Ndim, _Ndim)))
-         for al in range(_Ndim):
-            for be in range(_Ndim):
-                for gamma in range(_Ndim):
-                    for delta in range(_Ndim):
+         BCD_Rk = np.matrix(np.zeros((self.Ndim, self.Ndim)))
+         for al in range(self.Ndim):
+            for be in range(self.Ndim):
+                for gamma in range(self.Ndim):
+                    for delta in range(self.Ndim):
                         BCD_Rk[al,be] += M[be,gamma] * Rinv[delta,al] * BCD_k[delta,gamma] 
          BCD_SUMk += BCD_Rk
 
@@ -279,7 +279,7 @@ class hall_k:
            if(e > self.energy_bottom and e < self.energy_fermi[-1]):
                 for int_mu in range(len(self.energy_fermi)):
                      if(e <= self.energy_fermi[int_mu]):
-                           for beta in range(_Ndim):
+                           for beta in range(self.Ndim):
                                Om_k[int_mu][beta] += F[beta][ind]
 
            ind +=1
@@ -313,10 +313,10 @@ class hall_k:
          E = self.compute_bc(k)[0] #to change when the bug in diagonalize is corrected by Klauss
          Delta = 2*self.delta
 
-      BCD_k = [np.matrix(np.zeros((_Ndim, _Ndim))) for i in range(len(self.energy_fermi))]
+      BCD_k = [np.matrix(np.zeros((self.Ndim, self.Ndim))) for i in range(len(self.energy_fermi))]
 
       #we iterate over the momentum directions to which we will estimate the derivative
-      for alfa in range(_Ndim): 
+      for alfa in range(self.Ndim): 
              
            ### evaluate displaced k-point for numerical derivative
            k_disp = np.copy(k)
@@ -331,13 +331,13 @@ class hall_k:
               (Ed,CC,F) = self.compute_bc(k_disp_minus)
 
            ind = 0 #band index
-           band_contribution_to_dipole = [0 for i in range(_Ndim)] #one component for each Berry curvature component
+           band_contribution_to_dipole = [0 for i in range(self.Ndim)] #one component for each Berry curvature component
            for e in E:
 
                if(e > self.energy_bottom and e < self.energy_fermi[-1]): ## i.e.: we only do anything if this state is below the maximum fermi energy considered
 
                ### evaluate finite difference for this momentum and band
-                  for beta in range(_Ndim):
+                  for beta in range(self.Ndim):
                      band_contribution_to_dipole[beta] = (F_plus[beta][ind]-F[beta][ind]) / Delta
 
                   if(np.sum(np.abs(band_contribution_to_dipole)) > self.TOLBD):
@@ -347,7 +347,7 @@ class hall_k:
                   else:
                      for int_mu in range(len(self.energy_fermi)):
                         if(e <= self.energy_fermi[int_mu]):
-                           for beta in range(_Ndim):
+                           for beta in range(self.Ndim):
                                BCD_k[int_mu][alfa,beta] += band_contribution_to_dipole[beta]
 
                ind +=1
