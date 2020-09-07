@@ -1,0 +1,52 @@
+#! /bin/bash
+
+#PBS -l select=1:mem=1G:vmem=1G
+#PBS -l walltime=110:00:00
+#PBS -l cput=110:00:00
+#PBS -N "S100"
+#PBS -o job.out
+#PBS -j n 
+#PBS -J 1-100 
+#PBS -m ae
+
+count=$(($PBS_ARRAY_INDEX-1))
+OUTFILE="out_"$count
+folder=${PWD##*/} 
+
+HOST=$PBS_O_HOST
+SSH=/usr/bin/ssh
+pyfplopath=/home/jf11/FPLO/FPLO18.00-57/PYTHON
+export PYTHONPATH=$pyfplopath:$PYTHONPATH
+export PYTHONUNBUFFERED=true
+
+. /opt/intel/bin/ifortvars.sh intel64
+. /opt/intel/mkl/bin/intel64/mklvars_intel64.sh intel64
+
+### Copy application directory on compute node
+
+[ -d $PBS_O_WORKDIR ] || mkdir -p $PBS_O_WORKDIR
+
+# Change into the working directory
+cd $PBS_O_WORKDIR
+
+sleep $[ ( $RANDOM % 10 )  + 1 ]s
+
+rsync -avz --rsh=$SSH $HOST:$PBS_O_WORKDIR `dirname $PBS_O_WORKDIR`
+
+# run the executable
+mkdir $OUTFILE
+sleep $[ ( $RANDOM % 10 )  + 1 ]s
+python -u linear_hall.py $count 0 > $OUTFILE/$OUTFILE
+
+sleep 30
+
+# SAVE INFO ABOUT USED RESOUCES IN FILE resources-$PBS_JOBID
+echo "Calculation was done in directory $PBS_O_WORKDIR" >> resources-$PBS_JOBID
+$SSH $HOST /opt/pbs/bin/qstat -f $PBS_JOBID >> resources-$PBS_JOBID
+
+# Save all output to the home directory on the master where the dayly backup
+# is done
+#rsync -avz --rsh=$SSH $PBS_O_WORKDIR $HOST:`dirname $PBS_O_WORKDIR`&&  /bin/rm -rf $PBS_O_WORKDIR/$OUTFILE
+
+
+
