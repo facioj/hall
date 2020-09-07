@@ -59,7 +59,6 @@ class hall_k:
       self.delta = kwargs.pop('delta',1e-5)
       self.centered_scheme = kwargs.pop('centered_scheme',True)
       print("Using gauge, ", self.gauge)
-      print("Centered slice, ", self.centered)
       print("Scheme_Centered, ", self.centered_scheme)
       print("k-scale: ", self.S.kscale)
       self.ms  = 0 #we always have spin-orbit coupling
@@ -138,7 +137,7 @@ class hall_k:
              B[0,ind_al] = F2[al][0]
 
       file.write("A: \n",A)
-      file.write(,"B: \n",B)
+      file.write("B: \n",B)
 
       C = np.matmul(LA.inv(A),B.T)
            
@@ -164,7 +163,7 @@ class hall_k:
       for w in WF:
         if(w.index != 0 and w.index !=1): #except time-reversal for the moment and the identity
           file.write("\n -- ",w.symbol," --\n")
-          file.write(,"R=\n",w.alpha)
+          file.write("R=\n",w.alpha)
           self.symm[w.index] = w
           self.Rinv[w.index] = LA.inv(np.matrix(w.alpha))
           M_al_be = self.find_M_beta_gamma(R=w.alpha,index=w.index)
@@ -263,7 +262,7 @@ class hall_k:
       F = None
       (E,CC,F) = self.compute_bc(k)
 
-      Om_k = [[0,0,0] for i in range(len(self.energy_fermi))]
+      Om_k = [np.matrix(np.zeros((3, 1))) for i in range(len(self.energy_fermi))]
 
       ind = 0 #band index
       for e in E:
@@ -271,7 +270,7 @@ class hall_k:
                 for int_mu in range(len(self.energy_fermi)):
                      if(e <= self.energy_fermi[int_mu]):
                            for beta in range(self.Ndim):
-                               Om_k[int_mu][beta] += F[beta][ind]
+                               Om_k[int_mu][beta,0] += F[beta][ind]
 
            ind +=1
 

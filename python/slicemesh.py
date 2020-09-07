@@ -51,6 +51,8 @@ class slicemesh:
 
       linear: boolean. If true, the it is understood that the linear anomalous Hall is computed. This is only for defining units and structure of data in the reading/writting of results
 
+      energy_fermi: list of Fermi energies. 
+
       verbosity: three relevant ranges: [0-1], [1-2] and [2<].
 
       origin: array indicating the origin of the slices. By default is [0,0,0]
@@ -69,17 +71,19 @@ class slicemesh:
       self.origin = kwargs.pop('origin',[0.,0.,0.])
       self.centered = kwargs.pop('centered',True)
       self.root_name = kwargs.pop('root_name','out')
+      self.linear = kwargs.pop('linear',True) 
+      self.energy_fermi = kwargs.pop('energy_fermi',[0.0]) 
 
-      self.G1=G[:,0]
-      self.G2=G[:,1]
-      self.G3=G[:,2]
+      self.G1=self.G[:,0]
+      self.G2=self.G[:,1]
+      self.G3=self.G[:,2]
       self.dG1=LA.norm(self.G1)
       self.dG2=LA.norm(self.G2)
       self.dG3=LA.norm(self.G3)
 
       self.bohr_to_cm = 5.29177e-9     
       self.G_0 = 1./12906.4037217 #ohm-1 (conductance quantum: 2e^2/h)
-      self.VOL = np.abs(np.linalg.det(G))
+      self.VOL = np.abs(np.linalg.det(self.G))
       self.DK = LA.norm(np.cross(self.G1,self.G2)) / (self.mesh[0]*self.mesh[1]) #area associated with k-point in each slice (cross product is the area enclose by G1 and G2)
         
       print("Centered? : ", self.centered)
@@ -121,10 +125,8 @@ class slicemesh:
       self.ar = h5py.File("""%(root)s_%(plane)s/ar.hdf5"""%locals(),"w")
       run_info = self.ar.create_group("run_info")
       run_info.create_dataset('kscale',data=self.kscale)
-      run_info.create_dataset('energy_bottom',data=self.energy_bottom)
       run_info.create_dataset('energy_fermi',data=self.energy_fermi)
       run_info.create_dataset('mesh',data=self.mesh)
-      run_info.create_dataset('delta',data=self.delta)
       run_info.create_dataset('origin',data=self.origin)
       run_info.create_dataset('DK',data=self.DK)
       self.ar.close()
@@ -162,21 +164,25 @@ class slicemesh:
 
       ef_to_save = None
       ef_to_save_index = []
-      if(save_bcd_on_plane):
+      if(save_gk_on_plane):
          ef_to_save = kwargs["ef_to_save"]
          for ef in ef_to_save:
             ef_to_save_index.append(find_nearest(self.energy_fermi,ef))
 	 print("ef_to_save_index: ", ef_to_save_index)
          assert(ef_to_save != None)
 
-
+      kpoints = self.build_box(kz_plane)
       self.write_info_slice(plane)
-      self.write_info_slice(kpoints)
 
       print("Number of k-points: ",len(kpoints), "\n")
 
-      G_0 = # we should initialize the object to sum to zero, perhaps starting from a first call to gk to get the format of the object
-      G = [G_0 for i in range(len(self.energy_fermi))]
+      G_0 = np.matrix(np.zeros((3, 3))) 
+      if(self.linear):
+           G_0 = np.matrix(np.zeros((3, 1)))
+
+      print("G_0: ",G_0)
+
+      G = [np.copy(G_0) for i in range(len(self.energy_fermi))]
 
       total_G_on_plane = [] #just for saving g(k) if wanted: one list with different selected values of Fermi energy per k-point
 
@@ -187,7 +193,7 @@ class slicemesh:
 
            #computes and Berry curvature at kp
            k = np.array(kp)
-           g_k = g(k)
+           g_k = self.gk(k)
          
            g_k_to_save = [] #one per energy Fermi considered to save the BCD
            if(save_gk_on_plane):
@@ -196,7 +202,7 @@ class slicemesh:
               total_G_on_plane.append(g_k_to_save)
            else: 
               for int_mu in range(len(self.energy_fermi)):
-                  G[int_mu] += g_k[int_mu]
+                  G[int_mu] += g_k[int_mu] * self.DK
 
            i_counter += 1
            percentage = i_counter * 1. / len(kpoints) *100
@@ -253,10 +259,12 @@ class slicemesh:
       files = ["""%(file_name)s_%(i)s/ar.hdf5"""%locals() for i in range(self.mesh[2])]
 
       factor =  dk_perp * change_from_fplo_to_bohr
-      G = [np.matrix(np.zeros((3, 3))) for i in range(len(self.energy_fermi))]
+      G_0 = np.matrix(np.zeros((3, 3)))
       if(self.linear):
-           G_0 = [np.matrix(np.zeros((3, 1))) for i in range(len(self.energy_fermi))]
+           G_0 = np.matrix(np.zeros((3, 1)))
            factor =  dk_perp * change_from_fplo_to_bohr * self.G_0 *np.pi / self.bohr_to_cm * (-1.)
+
+      G = [np.copy(G_0) for i in range(len(self.energy_fermi))]
 
       ind = 0
       for name in files:
@@ -265,7 +273,9 @@ class slicemesh:
          if(AR.__contains__('G_data')):
              Gs = np.array(AR['G_data']['G'])
              for ind_ef in range(len(self.energy_fermi)):
-                 G[ind_ef] += Gs[ind_ef] * factor   
+                 G[ind_ef] += Gs[ind_ef] * factor  
+
+             print(G[0])
 
              result_slice = profile.create_group("""%(ind)s"""%locals())
              result_slice.create_dataset("tensor",data=Gs[ind_ef]*factor)
@@ -283,31 +293,22 @@ class slicemesh:
 
          ind+=1
 
-     result = final_arc.create_group("G_integrated")
-     result.create_dataset("G",data=G)
+      result = final_arc.create_group("G_integrated")
+      result.create_dataset("G",data=G)
   
-     #printing to files
+      #printing to files
 
-     if(self.linear):
+      names = ["x","y","z"]
+      if(self.linear):
+         for beta in range(3):
+             name = names[beta]
+             file = open("""sigma_%(name)s_vs_mu.dat"""%locals(),'w')
+             for ind_ef in range(len(self.energy_fermi)):
+                file.write(str(self.energy_fermi[ind_ef])+ " " + str(G[ind_ef][beta,0]) +"\n")
+             file.close()
 
-         file = open("sigma_xy_vs_mu.dat",'w')
-         for ind_ef in range(len(self.energy_fermi)):
-            file.write(self.energy_fermi[ind_ef], G[ind_ef][2])
-         file.close()
+      else:
 
-         file = open("sigma_xz_vs_mu.dat",'w')
-         for ind_ef in range(len(self.energy_fermi)):
-           file.write(self.energy_fermi[ind_ef], G[ind_ef][1])
-         file.close()
-
-         file = open("sigma_yz_vs_mu.dat",'w')
-         for ind_ef in range(len(self.energy_fermi)):
-           file.write(self.energy_fermi[ind_ef], G[ind_ef][0])
-         file.close()
-
-     else:
-
-         names = ["x","y","z"]
          file = open("dipole_vs_mu.dat",'w')
      
          #print list of tensors
@@ -339,11 +340,7 @@ class slicemesh:
            file.close()
 
  
-     print("\n Result of integrations succesfully written  \n")
-
-
-
-    file_as.close()
+      print("\n Result of integrations succesfully written  \n")
 
 def get_profile(**kwargs):
     """
