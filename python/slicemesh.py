@@ -312,32 +312,29 @@ class slicemesh:
          file = open("dipole_vs_mu.dat",'w')
      
          #print list of tensors
-         for int_mu in range(len(self.energy_fermi)):
-             BCD_sym, BCD_asym = sym_plus_asym(G[int_mu])
-
-             file.write("   ",self.energy_fermi[int_mu])
+         for int_ef in range(len(self.energy_fermi)):
+             st="   "+str(self.energy_fermi[int_ef])+"\n"
              for i in range(3):
                for j in range(3):
-                  file.write(G[int_mu][i,j],)
-               file.write("\n",)
+                  st+= " " + str(G[int_ef][i,j])
+               st+="\n"
+             file.write(st)
          file.close()
 
          #also print a file with each component for easier plotting
          for j in range(len(_derivative_cases)):
-           alpha = _derivative_cases[j][1]
-           beta = _derivative_cases[j][0]
+             alpha = _derivative_cases[j][1]
+             beta = _derivative_cases[j][0]
 
-           al_n = names[alpha]
-           be_n = names[beta]
+             al_n = names[alpha]
+             be_n = names[beta]
 
-           file_name = """D_%(al_n)s_%(be_n)s_vs_mu.dat"""%locals()
-           file = open(file_name,'w')
-
-           for int_mu in range(len(self.energy_fermi)):
-              BCD_sym, BCD_asym = sym_plus_asym(G[int_mu])
-              file.write(self.energy_fermi[int_mu],G[int_mu][alpha,beta], BCD_sym[alpha,beta], BCD_asym[alpha,beta])
-
-           file.close()
+             file_name = """D_%(al_n)s_%(be_n)s_vs_mu.dat"""%locals()
+             file = open(file_name,'w')
+             for int_ef in range(len(self.energy_fermi)):
+                BCD_sym, BCD_asym = sym_plus_asym(G[int_ef])
+                file.write(str(self.energy_fermi[int_ef]) + " " + str(G[int_mu][alpha,beta]) + " " +str(BCD_sym[alpha,beta]) + " " + str(BCD_asym[alpha,beta]))
+             file.close()
 
  
       print("\n Result of integrations succesfully written  \n")
