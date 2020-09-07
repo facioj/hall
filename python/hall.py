@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from __future__ import absolute_import, division, with_statement
+#from __future__ import absolute_import, division, with_statement
 
 __all__ = ['hall_k']
 __author__  = ['Jorge I. Facio']
@@ -21,17 +21,21 @@ from cpp_output import OutputGrabber
 
 class hall_k:
   """
-  The pourpose of this class to is to return a callable method that computes the summed-over-bands Berry curvature or Berry curvature dipole at a given k-point. Such callable method is to be interfaced with schemes that perform the three-dimensional integration, like the adaptive mesh project. The __call__ constructor is therefore introduced. This method has as argument the coordinates of the k-point (fplo units), and can return either the contribution to the linear anomalous Hall or the nonlinear (see below).
+  The current pourpose of this class to is to return a callable method that computes the summed-over-bands Berry curvature or Berry curvature dipole at a given k-point. Such callable method is to be interfaced with schemes that perform the three-dimensional integration, like the adaptive mesh project. The __call__ constructor is therefore introduced. This method has as argument the coordinates of the k-point (fplo units), and can return either the contribution to the linear anomalous Hall or the nonlinear (see below).
 
   Args:
 
        slabify object
 
+       verbosity: three relevant ranges: [0-1], [1-2] and [2<].
+
        linear: boolean. If true, the __called__ constructor computes the contribution of a certain k-point to the linear anomalous Hall conductivity. If false, it computes the contribution to the Berry curvature dipole
 
-       energy_fermi: [ef_1,..,ef_n] list of Fermi energies to considered. By default is [0.0].
+       Ndim: integer. Number of dimensions, assumed to be 3 (but could be 2).
 
-       verbosity: three relevant ranges: [0-1], [1-2] and [2<].
+       energy_bottom:  float. Bottom energy for integrations, by default -100eV. It could be used if, for instance, it is considered that a certain fully occupied and separated set of bands do not contribute to the integration.
+
+       energy_fermi: [ef_1,..,ef_n] list of Fermi energies to considered. By default is [0.0].
 
        gauge: gauge used for the Berry curvature calculation. By default is 'periodic'. `TO DO: implement the use of the relative gauge.`
 
@@ -39,53 +43,40 @@ class hall_k:
 
        centered_scheme: Boolean, it specifies how the numerical derivative of the Berry curvature is done
 
-       Ndim: integer. Number of dimensions, assumed to be 3 (but could be 2).
-
-       energy_bottom:  float. Bottom energy for integrations, by default -100eV. It could be used if, for instance, it is considered that a certain fully occupied and separated set of bands do not contribute to the integration.
-
        TOLBD: contribution of a Bloch state to the BCD larger than this number are neglected under the assumption that comes from degeneracies that should cancell between each other. By default: 1e25. Recommendation:  change and evaluate if it affects the results.
 
   """
 
   def __init__(self,**kwargs):
       self.S = kwargs['slabify']
-      self.Ndim = kwargs.pop('Ndim',3)
-      self.delta = kwargs.pop('delta',1e-5)
       self.verbosity = kwargs.pop('verbosity',0)
-      self.ms  = 0 #we always have spin-orbit coupling
+      self.linear = kwargs.pop('linear',True)
+      self.Ndim = kwargs.pop('Ndim',3)
       self.TOLBD = kwargs.pop("TOLBD",1e25)
       self.energy_bottom = kwargs.pop('energy_bottom', [-100.])
       self.energy_fermi = kwargs.pop('energy_fermi',[0.0])
       self.gauge = kwargs.pop('gauge','periodic')
+      self.delta = kwargs.pop('delta',1e-5)
       self.centered_scheme = kwargs.pop('centered_scheme',True)
-      self.linear = kwargs.pop('linear',True)
       print("Using gauge, ", self.gauge)
       print("Centered slice, ", self.centered)
       print("Scheme_Centered, ", self.centered_scheme)
       print("k-scale: ", self.S.kscale)
+      self.ms  = 0 #we always have spin-orbit coupling
 
-  def compute_E(self,k):
+  def compute_Ek(self,k):
       """
       Computes eigenvalues
 
       Args:
        
-      k: np array with the k-points coordinate in the units used in the +hamdata file
+      k: np array with the k-points coordinate in proper units
 
       Returns:
-         Output of sla.diagonalize(makef=True)
+         Eigenvalues as computed with numpy.linalg.eigh
       """
       Hk = self.S.hamAtKPoint(k,self.ms)
-      if(self.verbosity<2):
-          out = OutputGrabber()
-          out.start()
-          (E,CC) = self.S.diagonalize(Hk)
-          out.stop()
-          del out
-      else:
-          (E,CC) = self.S.diagonalize(Hk)
-
-      return E
+      return LA.eigh(Hk)[0]
 
   def compute_bc(self,k):
       """
@@ -93,7 +84,7 @@ class hall_k:
 
       Args:
        
-      k: np array with the k-points coordinate in the units used in the +hamdata file
+      k: np array with the k-points coordinate in proper units
 
       Returns:
          Output of sla.diagonalize(makef=True)
@@ -259,7 +250,7 @@ class hall_k:
            om_{a}(k) = \sum_{n,E_{nk}<E_f}  \Omega_a  
       
       Args:
-          k point
+          k: np array with the k-points coordinate in proper units
 
       Returns:
           list of BC vectors (one per Fermi energy)
@@ -294,7 +285,7 @@ class hall_k:
            d_{ab}(k) = \sum_{n,E_{nk}<E_f}  \\frac{\partial \Omega_b}{\partial k_a} 
 
       Args:
-          k point
+          k: np array with the k-points coordinate in proper units
 
       Returns:
           list of BCD tensors (one tensor per Fermi energy)
