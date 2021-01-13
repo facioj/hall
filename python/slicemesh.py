@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+#This the the standard version + use of M(y)xtime-reversal symmetry
+
 import sys,os,re,string,shutil,time
 from subprocess import call
 import numpy as np
@@ -73,6 +75,12 @@ class slicemesh:
       self.root_name = kwargs.pop('root_name','out')
       self.linear = kwargs.pop('linear',True) 
       self.energy_fermi = kwargs.pop('energy_fermi',[0.0]) 
+      ######
+      self.use_symmetries = kwargs.pop('use_symmetries',False)
+      self.s_k = kwargs.pop('s_k',None)
+
+      if use_symmetries:
+         assert self.s_k != None
 
       self.G1=self.G[:,0]
       self.G2=self.G[:,1]
@@ -119,7 +127,6 @@ class slicemesh:
                   ny=self.mesh[1],yinterval=[0,(1.0-1./self.mesh[1])*self.dG2],
                   nz=1,zinterval=[kz_plane,kz_plane])
 
-
       kpoints = box.mesh(self.kscale) #after this the points are in Bohr
       return kpoints
 
@@ -155,6 +162,8 @@ class slicemesh:
 
            plane: integer between 0 and self.mesh[2] that defines the slice of k-points
 
+           kpoints: list of kpoints in the slice. Optional. If it is provided, this is the list of kpoints that defines the slice. 
+
            save_gk_on_plane: boolean. If true, g(k) is stored. In that case, ef_to_save also should be provided.
 
            ef_to_save: fermi energies for which a list of g(k) (one per momentum in the slice) will be stored
@@ -162,9 +171,19 @@ class slicemesh:
       """
 
       plane = kwargs["plane"]
-      assert(plane > -1 and plane < self.mesh[2])
+      kpoints = kwargs.pop("kpoints",None)
+      
+      if kpoints == None:
+         kz_plane = self.k3_plane(plane)
+         kpoints = self.build_box(kz_plane)
+         print("Using class box for plane: ", str(plane))
+         assert(plane > -1 and plane < self.mesh[2])
+      else:
+         print("Using user list of kpoints. ")
 
-      kz_plane = self.k3_plane(plane)
+      self.write_info_slice(plane)
+      print("Number of k-points: ",len(kpoints), "\n")
+      
       save_gk_on_plane = kwargs.pop("save_gk_on_plane",False)
 
       ef_to_save = None
@@ -175,11 +194,6 @@ class slicemesh:
             ef_to_save_index.append(find_nearest(self.energy_fermi,ef))
 	 print("ef_to_save_index: ", ef_to_save_index)
          assert(ef_to_save != None)
-
-      kpoints = self.build_box(kz_plane)
-      self.write_info_slice(plane)
-
-      print("Number of k-points: ",len(kpoints), "\n")
 
       G_0 = np.matrix(np.zeros((3, 3))) 
       if(self.linear):
@@ -199,12 +213,18 @@ class slicemesh:
            #computes and Berry curvature at kp
            k = np.array(kp)
            g_k = self.gk(k)
-         
+
            g_k_to_save = [] #one per energy Fermi considered to save the BCD
            if(save_gk_on_plane):
               for int_s in ef_to_save_index:
                 g_k_to_save.append(g_k[int_s])
               total_G_on_plane.append(g_k_to_save)
+
+           if(use_symmetries):
+              for int_mu in range(len(self.energy_fermi)):
+                  #call symmetrizer for each mu to replace the matrix G[int_mu] by the sum over the star
+                  G[int_mu] += self.s_k.compute_bcd_partners(self.linear,k,g_k[int_mu] * self.DK) 
+                  #Dipole_integral[int_mu] += self.compute_bcd_partners(kp = k,bcd_k = BCD_k[int_mu], indexes = star_index)
            else: 
               for int_mu in range(len(self.energy_fermi)):
                   G[int_mu] += g_k[int_mu] * self.DK
