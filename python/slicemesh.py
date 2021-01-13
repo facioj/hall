@@ -77,6 +77,11 @@ class slicemesh:
       self.G1=self.G[:,0]
       self.G2=self.G[:,1]
       self.G3=self.G[:,2]
+
+      print("G1 = (" + str(self.G1[0])+", "+ str(self.G1[1])+", "+str(self.G1[2])+")")
+      print("G2 = (" + str(self.G2[0])+", "+ str(self.G2[1])+", "+str(self.G2[2])+")")
+      print("G3 = (" + str(self.G3[0])+", "+ str(self.G3[1])+", "+str(self.G3[2])+")")
+
       self.dG1=LA.norm(self.G1)
       self.dG2=LA.norm(self.G2)
       self.dG3=LA.norm(self.G3)
@@ -312,28 +317,30 @@ class slicemesh:
          file = open("dipole_vs_mu.dat",'w')
      
          #print list of tensors
-         for int_ef in range(len(self.energy_fermi)):
-             st="   "+str(self.energy_fermi[int_ef])+"\n"
+         for int_mu in range(len(self.energy_fermi)):
+             BCD_sym, BCD_asym = sym_plus_asym(G[int_mu])
+             file.write(str(self.energy_fermi[int_mu])+ "\n")
+#             file.write("   ",self.energy_fermi[int_mu])
              for i in range(3):
                for j in range(3):
-                  st+= " " + str(G[int_ef][i,j])
-               st+="\n"
-             file.write(st)
+                  file.write(str(G[int_mu][i,j])+" ")
+               file.write("\n",)
          file.close()
 
          #also print a file with each component for easier plotting
-         for j in range(len(_derivative_cases)):
-             alpha = _derivative_cases[j][1]
-             beta = _derivative_cases[j][0]
+         for alpha in range(3):
+           for beta in range(3):
 
              al_n = names[alpha]
              be_n = names[beta]
 
              file_name = """D_%(al_n)s_%(be_n)s_vs_mu.dat"""%locals()
              file = open(file_name,'w')
-             for int_ef in range(len(self.energy_fermi)):
-                BCD_sym, BCD_asym = sym_plus_asym(G[int_ef])
-                file.write(str(self.energy_fermi[int_ef]) + " " + str(G[int_mu][alpha,beta]) + " " +str(BCD_sym[alpha,beta]) + " " + str(BCD_asym[alpha,beta]))
+
+             for int_mu in range(len(self.energy_fermi)):
+                BCD_sym, BCD_asym = sym_plus_asym(G[int_mu])
+                file.write(str(self.energy_fermi[int_mu])+" "+str(G[int_mu][alpha,beta])+" "+str(BCD_sym[alpha,beta]) +" "+ str(BCD_asym[alpha,beta])+"\n")
+
              file.close()
 
  
